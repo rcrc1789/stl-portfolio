@@ -3,7 +3,12 @@ import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import QRCode from 'https://cdn.jsdelivr.net/npm/qrcode@1.5.4/+esm';
 
-const works = { demo: { file: './models/demo.stl' } };
+const works = {
+  demo: { file: './models/demo.stl' },
+  lamp1: { file: './models/lamp1.stl' },
+  lamp2: { file: './models/lamp2.stl' },
+  lamp3: { file: './models/lamp3.stl' }
+};
 const slug = new URLSearchParams(location.search).get('model') || 'demo';
 const work = works[slug];
 const viewer = document.querySelector('#viewer');
