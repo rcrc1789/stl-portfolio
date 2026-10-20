@@ -1,11 +1,92 @@
 import * as THREE from 'three';
-import {STLLoader} from 'three/addons/loaders/STLLoader.js';
-import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import QRCode from 'https://cdn.jsdelivr.net/npm/qrcode@1.5.4/+esm';
-const works={demo:{title:'我的第一件作品',description:'可旋轉與縮放的 STL 範例模型。',file:'./models/demo.stl'}};
-const slug=new URLSearchParams(location.search).get('model')||'demo';const work=works[slug];const $=s=>document.querySelector(s);
-if(work){document.title=work.title+'｜STL作品集';$('#title').textContent=work.title;$('#description').textContent=work.description;$('#slug').textContent=slug;}else{$('#title').textContent='找不到此作品';$('#description').textContent='請確認作品網址。';$('#slug').textContent=slug;}
-const share=new URL('?model='+encodeURIComponent(slug),location.href).href;QRCode.toCanvas(document.createElement('canvas'),share,{width:196,margin:1},(e,c)=>{if(!e)$('#qrcode').append(c)});$('#copy').onclick=async()=>{await navigator.clipboard.writeText(share);$('#copy').textContent='已複製！';};
-const viewer=$('#viewer'),scene=new THREE.Scene();scene.background=new THREE.Color('#111a2b');const camera=new THREE.PerspectiveCamera(42,1,.01,10000);const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));viewer.append(renderer.domElement);scene.add(new THREE.HemisphereLight(0xffffff,0x35435f,2),new THREE.DirectionalLight(0xffffff,2));const light=scene.children[1];light.position.set(4,6,5);const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;const material=new THREE.MeshStandardMaterial({color:0x9cf5d0,metalness:.15,roughness:.4});let mesh;
-function resize(){const w=viewer.clientWidth,h=viewer.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()}new ResizeObserver(resize).observe(viewer);resize();function show(g){g.computeVertexNormals();g.computeBoundingBox();const center=new THREE.Vector3();g.boundingBox.getCenter(center);g.translate(-center.x,-center.y,-center.z);const box=new THREE.Vector3();g.boundingBox.getSize(box);const n=Math.max(box.x,box.y,box.z)||1;if(mesh)scene.remove(mesh);mesh=new THREE.Mesh(g,material);scene.add(mesh);camera.position.set(n*1.7,n*1.3,n*1.9);camera.near=n/1000;camera.far=n*100;camera.updateProjectionMatrix();controls.target.set(0,0,0);controls.minDistance=n*.55;controls.maxDistance=n*8;controls.update();$('#loading').style.display='none'}
-if(work)new STLLoader().load(work.file,show,undefined,()=>{$('#loading').textContent='模型載入失敗';$('#error').textContent='請確認 STL 檔案已加入 models/。'});$('#reset').onclick=()=>{if(mesh){const b=mesh.geometry.boundingBox.getSize(new THREE.Vector3()),n=Math.max(b.x,b.y,b.z);camera.position.set(n*1.7,n*1.3,n*1.9);controls.update()}};$('#file').onchange=e=>{const f=e.target.files[0];if(f)new FileReader().onload=ev=>{show(new STLLoader().parse(ev.target.result));$('#title').textContent=f.name;$('#description').textContent='本機暫存預覽'};};$('#file').onchange=e=>{const f=e.target.files[0];if(f){const r=new FileReader();r.onload=ev=>{show(new STLLoader().parse(ev.target.result));$('#title').textContent=f.name;$('#description').textContent='本機暫存預覽'};r.readAsArrayBuffer(f)}};function animate(){requestAnimationFrame(animate);controls.update();renderer.render(scene,camera)}animate();
+
+const works = { demo: { file: './models/demo.stl' } };
+const slug = new URLSearchParams(location.search).get('model') || 'demo';
+const work = works[slug];
+const viewer = document.querySelector('#viewer');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#d6d6d6');
+const camera = new THREE.PerspectiveCamera(42, 1, 0.01, 100);
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+viewer.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x777777, 2.2));
+const keyLight = new THREE.DirectionalLight(0xffffff, 2.5);
+keyLight.position.set(4, 7, 6);
+scene.add(keyLight);
+const fillLight = new THREE.DirectionalLight(0xffffff, 1.1);
+fillLight.position.set(-5, 2, -4);
+scene.add(fillLight);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.enablePan = false;
+const material = new THREE.MeshStandardMaterial({ color: 0x777777, metalness: 0, roughness: 0.72 });
+let mesh = null;
+let modelRadius = 1;
+function fitCamera(resetDirection = false) {
+  if (!mesh) return;
+  const aspect = Math.max(viewer.clientWidth / Math.max(viewer.clientHeight, 1), 0.01);
+  const vertical = THREE.MathUtils.degToRad(camera.fov);
+  const fitAngle = 2 * Math.atan(Math.tan(vertical / 2) * Math.min(aspect, 1));
+  const distance = (modelRadius / Math.sin(fitAngle / 2)) * 1.18;
+  const direction = resetDirection || camera.position.length() < 0.001 ? new THREE.Vector3(1, 0.72, 1.2).normalize() : camera.position.clone().sub(controls.target).normalize();
+  camera.position.copy(direction.multiplyScalar(distance));
+  camera.near = Math.max(distance / 1000, 0.001);
+  camera.far = distance * 20;
+  camera.updateProjectionMatrix();
+  controls.target.set(0, 0, 0);
+  controls.minDistance = modelRadius * 0.35;
+  controls.maxDistance = distance * 6;
+  controls.update();
+}
+function resize() {
+  const width = Math.max(viewer.clientWidth, 1);
+  const height = Math.max(viewer.clientHeight, 1);
+  renderer.setSize(width, height, false);
+  camera.aspect = width / height;
+  camera.updateProjectionMatrix();
+  fitCamera();
+}
+new ResizeObserver(resize).observe(viewer);
+resize();
+function showGeometry(geometry) {
+  geometry.computeBoundingBox();
+  const bounds = geometry.boundingBox;
+  const center = new THREE.Vector3();
+  const size = new THREE.Vector3();
+  bounds.getCenter(center);
+  bounds.getSize(size);
+  const largestSide = Math.max(size.x, size.y, size.z);
+  if (!Number.isFinite(largestSide) || largestSide <= 0) throw new Error('STL has no valid dimensions');
+  geometry.translate(-center.x, -center.y, -center.z);
+  geometry.scale(2.4 / largestSide, 2.4 / largestSide, 2.4 / largestSide);
+  geometry.computeVertexNormals();
+  geometry.computeBoundingSphere();
+  if (mesh) {
+    scene.remove(mesh);
+    mesh.geometry.dispose();
+  }
+  mesh = new THREE.Mesh(geometry, material);
+  modelRadius = Math.max(geometry.boundingSphere.radius, 0.01);
+  scene.add(mesh);
+  fitCamera(true);
+}
+if (work) new STLLoader().load(work.file, showGeometry, undefined, (error) => console.error('STL load failed', error));
+const shareUrl = new URL('?model=' + encodeURIComponent(slug), location.href).href;
+QRCode.toCanvas(shareUrl, { width: 196, margin: 2, errorCorrectionLevel: 'H', color: { dark: '#111111', light: '#ffffff' } }, (error, canvas) => {
+  if (error) return console.error('QR Code generation failed', error);
+  document.querySelector('#qrcode').appendChild(canvas);
+});
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
